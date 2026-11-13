@@ -14,6 +14,8 @@ import ThemedText from "../ThemedText";
 interface Props {
   product: Product;
   onToggleActions: () => void;
+  // Tocar la tarjeta abre el detalle; deslizarla muestra las acciones.
+  onOpen?: () => void;
 }
 
 function getStatus(product: Product) {
@@ -25,7 +27,7 @@ function getStatus(product: Product) {
   return { text: price === null ? label : `${label} · $${price}`, color: Colors.primary };
 }
 
-const ProductCard = ({ product, onToggleActions }: Props) => {
+const ProductCard = ({ product, onToggleActions, onOpen }: Props) => {
   const image = getProductImage(product);
   const status = getStatus(product);
 
@@ -40,11 +42,11 @@ const ProductCard = ({ product, onToggleActions }: Props) => {
   return (
     <View {...panResponder.panHandlers}>
       <Pressable
-        onPress={onToggleActions}
+        onPress={onOpen ?? onToggleActions}
         style={styles.card}
         accessibilityRole="button"
         accessibilityLabel={`${product.name}, ${status.text}`}
-        accessibilityHint="Muestra las acciones del producto"
+        accessibilityHint={onOpen ? "Abre el detalle del producto" : "Muestra las acciones del producto"}
       >
         {image ? (
           <Image source={image} style={styles.photo} contentFit="cover" />

@@ -8,6 +8,7 @@ import ThemedButton from "@/presentation/theme/components/ThemedButton";
 import ThemedText from "@/presentation/theme/components/ThemedText";
 import { startEditingModel } from "@/features/products/newProductSlice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { useAfterSave } from "@/presentation/screens/products/sections/useSectionSaved";
 import { router } from "expo-router";
 import { Boxes, Network, Plus, Table } from "lucide-react-native";
 import { useState } from "react";
@@ -16,20 +17,24 @@ import { StyleSheet, View } from "react-native";
 // Fase 3 / 19 (Con modelos) y 23 (Modelos con variantes).
 const ModelsScreen = () => {
   const dispatch = useAppDispatch();
-  const { name, typeId, models } = useAppSelector((s) => s.newProduct);
+  const { name, typeId, models, mode } = useAppSelector((s) => s.newProduct);
+  const isEdit = mode === "edit";
+  const afterSave = useAfterSave();
   const [isAddOpen, setIsAddOpen] = useState(false);
 
   const withVariants = typeId === VARIANTS_TYPE;
   const TypeIcon = withVariants ? Network : Boxes;
 
   // Cada modelo se guarda al editarlo: "Continuar" solo pasa al paso 4.
-  const onContinue = () => router.push("/new-product/publish");
+  // Al editar (Fase 4) cada modelo ya se guardó al editarlo: "Listo" solo vuelve al detalle.
+  const onContinue = () => (isEdit ? afterSave() : router.push("/new-product/publish"));
 
   return (
     <NewProductLayout
       step={3}
       backExits
-      footer={<ThemedButton title="Continuar" onPress={onContinue} />}
+      editTitle="Fotos, precios y modelos"
+      footer={<ThemedButton title={isEdit ? "Listo" : "Continuar"} onPress={onContinue} />}
     >
       <View style={styles.titleRow}>
         <ThemedText variant="title" style={styles.title}>

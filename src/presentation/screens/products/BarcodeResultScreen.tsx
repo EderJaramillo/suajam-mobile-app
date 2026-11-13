@@ -7,10 +7,10 @@ import ScreenLayout from "@/presentation/theme/components/ScreenLayout";
 import ThemedButton from "@/presentation/theme/components/ThemedButton";
 import ThemedTextInput from "@/presentation/theme/components/ThemedTextInput";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { ScanBarcode } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Alert, Pressable } from "react-native";
+import { Pressable } from "react-native";
 
 // Fase 2 / 12. Las pantallas 13 y 14 están fuera del alcance: "no encontrado"
 // es solo un aviso y el código también se puede escribir en este mismo campo.
@@ -32,7 +32,7 @@ const BarcodeResultScreen = () => {
   };
 
   const onViewProduct = () => {
-    Alert.alert("Próximamente", "El detalle del producto estará disponible pronto.");
+    if (product) router.push(`/product/${product.id}` as Href);
   };
 
   return (

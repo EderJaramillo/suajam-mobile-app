@@ -6,6 +6,7 @@ import newProductReducer, {
   resetDraft,
   toSavedDraft,
 } from "@/features/products/newProductSlice";
+import productDetailReducer from "@/features/products/productDetailSlice";
 import productsReducer from "@/features/products/productsSlice";
 import { configureStore, createListenerMiddleware } from "@reduxjs/toolkit";
 
@@ -14,6 +15,7 @@ const rootReducer = {
   business: businessReducer,
   products: productsReducer,
   newProduct: newProductReducer,
+  productDetail: productDetailReducer,
 };
 
 // Cada cambio del borrador se guarda en el teléfono; al publicar o salir se borra.
@@ -24,15 +26,21 @@ draftListener.startListening({
     const state = api.getState() as { business: { activeSlug: string | null }; newProduct: Parameters<typeof toSavedDraft>[0] };
     const slug = state.business.activeSlug;
     if (!slug) return;
+    // Editar un producto ya creado (Fase 4) no es un borrador: no se guarda ni se borra.
+    const before = (api.getOriginalState() as typeof state).newProduct;
     if (resetDraft.match(action) || publishProduct.fulfilled.match(action)) {
-      deleteDraftFile(slug);
+      if (before.mode !== "edit") deleteDraftFile(slug);
       return;
     }
+    if (state.newProduct.mode === "edit") return;
     // Agrupa ráfagas de cambios (por ejemplo, al escribir) en una sola escritura.
     api.cancelActiveListeners();
     await api.delay(400);
     const draft = (api.getState() as typeof state).newProduct;
-    if (draft.productId && !draft.published) saveDraftFile(slug, toSavedDraft(draft));
+    // Se revisa de nuevo: en la espera pudo empezar una edición (Fase 4), que no es borrador.
+    if (draft.productId && !draft.published && draft.mode !== "edit") {
+      saveDraftFile(slug, toSavedDraft(draft));
+    }
   },
 });
 

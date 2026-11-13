@@ -3,7 +3,7 @@ import { resetDraft } from "@/features/products/newProductSlice";
 import { fetchProducts } from "@/features/products/productsSlice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { router } from "expo-router";
-import { Info, X } from "lucide-react-native";
+import { Ellipsis, Info, X } from "lucide-react-native";
 import { useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import AppBar from "../AppBar";
@@ -23,6 +23,9 @@ interface Props {
   title?: string;
   // Texto del paso cuando la pantalla no usa el nombre normal ("Publicación").
   stepLabel?: string;
+  // Fase 4: al editar un producto ya creado se usa la barra de la sección, sin pasos.
+  editTitle?: string;
+  onEditMenu?: () => void;
 }
 
 export function useLeaveNewProduct() {
@@ -41,14 +44,39 @@ const NewProductLayout = ({
   backExits = false,
   title = "Agregar producto",
   stepLabel,
+  editTitle,
+  onEditMenu,
 }: Props) => {
   const productId = useAppSelector((s) => s.newProduct.productId);
   const error = useAppSelector((s) => s.newProduct.error);
+  const mode = useAppSelector((s) => s.newProduct.mode);
   const leave = useLeaveNewProduct();
   const [isExitOpen, setIsExitOpen] = useState(false);
 
   // Antes del paso 1 no hay borrador que guardar.
   const onExit = () => (productId ? setIsExitOpen(true) : leave());
+
+  if (mode === "edit") {
+    return (
+      <ScreenLayout
+        compactTop
+        header={
+          <AppBar
+            title={editTitle ?? title}
+            onBack={() => router.back()}
+            onAction={onEditMenu}
+            actionIcon={Ellipsis}
+            actionLabel="Más opciones"
+          />
+        }
+        footer={footer}
+      >
+        <View style={styles.spacer} />
+        {children}
+        {error && <InfoBanner tone="error" message={error} />}
+      </ScreenLayout>
+    );
+  }
 
   return (
     <ScreenLayout

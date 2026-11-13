@@ -10,7 +10,12 @@ import {
 } from "@/features/products/productsSlice";
 import { PRODUCT_LIMIT, type Product, type VisibilityFilter } from "@/features/products/productsTypes";
 import { deleteDraftFile, loadDraftFile } from "@/features/products/draftStorage";
-import { restoreDraft, resumeRoute, type SavedDraft } from "@/features/products/newProductSlice";
+import {
+  resetDraft,
+  restoreDraft,
+  resumeRoute,
+  type SavedDraft,
+} from "@/features/products/newProductSlice";
 import AppBar from "@/presentation/theme/components/AppBar";
 import BottomNav from "@/presentation/theme/components/BottomNav";
 import ConfirmDialog from "@/presentation/theme/components/ConfirmDialog";
@@ -29,7 +34,7 @@ import {
   selectFilteredProducts,
   selectHasActiveFilters,
 } from "@/store/selectors";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import {
   Archive,
   CircleUserRound,
@@ -64,7 +69,15 @@ const ProductsScreen = () => {
   const [openProductId, setOpenProductId] = useState<number | null>(null);
   const [productToArchive, setProductToArchive] = useState<Product | null>(null);
   const activeSlug = useAppSelector((s) => s.business.activeSlug);
-  const draftInProgress = useAppSelector((s) => s.newProduct.productId !== null);
+  const draftInProgress = useAppSelector(
+    (s) => s.newProduct.productId !== null && s.newProduct.mode === "create",
+  );
+  const isEditing = useAppSelector((s) => s.newProduct.mode === "edit");
+
+  const startNewProduct = () => {
+    if (isEditing) dispatch(resetDraft());
+    router.push("/new-product");
+  };
   // Borrador que quedó a medias la última vez (la app se cerró o se recargó).
   const [savedDraft, setSavedDraft] = useState<SavedDraft | null>(() =>
     activeSlug && !draftInProgress ? loadDraftFile<SavedDraft>(activeSlug) : null,
@@ -115,6 +128,7 @@ const ProductsScreen = () => {
         <ProductCard
           product={item}
           onToggleActions={() => setOpenProductId((id) => (id === item.id ? null : item.id))}
+          onOpen={() => router.push(`/product/${item.id}` as Href)}
         />
         {isOpen &&
           (item.is_active ? (
@@ -231,7 +245,7 @@ const ProductsScreen = () => {
         title="Aún no tienes productos"
         description="Agrega tu primer producto en menos de 2 minutos."
       />
-      <ThemedButton title="Agregar producto" onPress={() => router.push("/new-product")} />
+      <ThemedButton title="Agregar producto" onPress={startNewProduct} />
     </View>
   ) : undefined;
 
@@ -287,7 +301,7 @@ const ProductsScreen = () => {
           title="Agregar producto"
           icon={Plus}
           disabled={isLimitReached}
-          onPress={() => router.push("/new-product")}
+          onPress={startNewProduct}
         />
       </View>
       <BottomNav active="products" onSelect={onTabSelect} />

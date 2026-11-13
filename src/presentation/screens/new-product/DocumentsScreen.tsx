@@ -10,6 +10,7 @@ import NewProductLayout from "@/presentation/theme/components/new-product/NewPro
 import ThemedButton from "@/presentation/theme/components/ThemedButton";
 import ThemedText from "@/presentation/theme/components/ThemedText";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { useAfterSave } from "@/presentation/screens/products/sections/useSectionSaved";
 import * as DocumentPicker from "expo-document-picker";
 import { router } from "expo-router";
 import { FileText, Trash2, Upload } from "lucide-react-native";
@@ -24,7 +25,9 @@ const formatSize = (bytes: number) =>
 // Fase 3 / 39: los PDF se eligen aquí y se suben al tocar "Guardar documentos".
 const DocumentsScreen = () => {
   const dispatch = useAppDispatch();
-  const { documents, isSaving } = useAppSelector((s) => s.newProduct);
+  const { documents, isSaving, mode } = useAppSelector((s) => s.newProduct);
+  const isEdit = mode === "edit";
+  const afterSave = useAfterSave();
   const [items, setItems] = useState<DocumentItem[]>(() =>
     documents.map((d) => ({
       key: `doc-${d.id}`,
@@ -35,6 +38,8 @@ const DocumentsScreen = () => {
     })),
   );
   const [tooBig, setTooBig] = useState(false);
+  const isDirty =
+    items.length !== documents.length || items.some((item) => item.id === null);
 
   const addPdf = async () => {
     const result = await DocumentPicker.getDocumentAsync({
@@ -61,26 +66,33 @@ const DocumentsScreen = () => {
 
   const onSave = async () => {
     const result = await dispatch(saveDocuments(items));
-    if (saveDocuments.fulfilled.match(result)) router.back();
+    if (!saveDocuments.fulfilled.match(result)) return;
+    if (isEdit) afterSave();
+    else router.back();
   };
 
   return (
     <NewProductLayout
       step={4}
       stepLabel="Publicación"
+      editTitle="Documentos"
       footer={
-        <ThemedButton
-          title="Guardar documentos"
-          loading={isSaving}
-          loadingTitle="Subiendo…"
-          onPress={onSave}
-        />
+        !isEdit || isDirty ? (
+          <ThemedButton
+            title={isEdit ? "Guardar esta sección" : "Guardar documentos"}
+            loading={isSaving}
+            loadingTitle="Subiendo…"
+            onPress={onSave}
+          />
+        ) : undefined
       }
     >
-      <ThemedText variant="title">Documentos del producto</ThemedText>
-      <ThemedText color={Colors.textSecondary}>
-        Agrega fichas técnicas o instrucciones en PDF. Máximo 50 MB por archivo.
-      </ThemedText>
+      <ThemedText variant="title">{isEdit ? "Archivos del producto" : "Documentos del producto"}</ThemedText>
+      {!isEdit && (
+        <ThemedText color={Colors.textSecondary}>
+          Agrega fichas técnicas o instrucciones en PDF. Máximo 50 MB por archivo.
+        </ThemedText>
+      )}
 
       {items.length > 0 && (
         <View style={styles.card}>
@@ -119,6 +131,11 @@ const DocumentsScreen = () => {
       )}
 
       <ThemedButton title="Agregar PDF" variant="outline" icon={Upload} onPress={addPdf} />
+      {isEdit && (
+        <ThemedText variant="caption" color={Colors.textSecondary}>
+          Máximo 50 MB por archivo. Guardar aparece solo cuando haces cambios.
+        </ThemedText>
+      )}
 
       {tooBig && (
         <InfoBanner

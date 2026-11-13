@@ -9,14 +9,15 @@ import ThemedButton from "@/presentation/theme/components/ThemedButton";
 import ThemedText from "@/presentation/theme/components/ThemedText";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { Check, CircleCheck, Plus, Share2, X } from "lucide-react-native";
-import { Alert, Share, StyleSheet, View } from "react-native";
+import { Share, StyleSheet, View } from "react-native";
 
 // Fase 3 / 40: el producto ya está visible.
 const PublishedScreen = () => {
   const dispatch = useAppDispatch();
   const published = useAppSelector((s) => s.newProduct.published);
+  const productId = useAppSelector((s) => s.newProduct.productId);
   const leave = useLeaveNewProduct();
 
   const name = published?.name ?? "Tu producto";
@@ -47,9 +48,13 @@ const PublishedScreen = () => {
               <ThemedButton
                 title="Ver producto"
                 variant="outline"
-                onPress={() =>
-                  Alert.alert("Próximamente", "El detalle del producto estará disponible pronto.")
-                }
+                onPress={() => {
+                  // Fase 4: se cierra el alta y se abre el detalle del producto recién publicado.
+                  leave();
+                  if (productId) {
+                    router.push(`/product/${productId}` as Href);
+                  }
+                }}
               />
             </View>
             <View style={styles.flex}>

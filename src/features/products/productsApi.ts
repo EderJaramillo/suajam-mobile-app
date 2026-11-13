@@ -298,3 +298,17 @@ export function uploadDocumentRequest(
 export function deleteDocumentRequest(context: BusinessRequestContext, id: number) {
   return apiRequest<unknown>(`/catalog/documents/${id}/`, { ...context, method: "DELETE" });
 }
+
+// La API no filtra por producto en estos listados: se traen y se filtran aquí.
+export async function getProductFiltersRequest(context: BusinessRequestContext, product: number) {
+  const page = await apiRequest<PaginatedResponse<ProductFilterLink>>(
+    "/catalog/product_filters/?items=500",
+    context,
+  );
+  return page.results.filter((link) => link.product === product);
+}
+
+export async function getProductDocumentsRequest(context: BusinessRequestContext, product: number) {
+  const page = await getDocumentsRequest(context);
+  return page.results.filter((doc) => doc.product === product);
+}

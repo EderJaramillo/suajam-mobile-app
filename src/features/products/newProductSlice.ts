@@ -21,6 +21,9 @@ import {
   createProductFilterRequest,
   getFiltersRequest,
   getLabelsRequest,
+  getProductRequest,
+  getProductFiltersRequest,
+  getProductDocumentsRequest,
   deleteProductFilterRequest,
   uploadDocumentRequest,
   deleteDocumentRequest,
@@ -138,6 +141,8 @@ export interface NewProductState {
   showOnStore: boolean;
   showOnPos: boolean;
   savedImages: SavedImage[];
+  // "create": alta de producto (Fase 3). "edit": editar un producto ya creado (Fase 4).
+  mode: "create" | "edit";
   // Paso 4.
   description: string;
   sku: string;
@@ -175,6 +180,7 @@ const initialState: NewProductState = {
   showOnStore: true,
   showOnPos: true,
   savedImages: [],
+  mode: "create",
   description: "",
   sku: "",
   ivaRate: "0",
@@ -433,6 +439,142 @@ export const saveDocuments = createAsyncThunk<SavedDocument[], DocumentItem[], T
   },
 );
 
+// Fase 4: carga un producto ya creado en el borrador para editarlo por secciones (o para
+// terminar de crearlo). Reutiliza las mismas pantallas y guardados del alta.
+interface ServerPresentation {
+  id: number;
+  name: string;
+  price: string;
+  cost: string;
+  is_active: boolean;
+  barcode: string | null;
+  is_discount?: boolean;
+  discount?: number;
+  discount_store?: boolean;
+  discount_pos?: boolean;
+}
+
+interface ServerModel {
+  id: number;
+  name: string;
+  is_active: boolean;
+  images?: unknown;
+  presentations?: ServerPresentation[];
+}
+
+const toRate = (value: unknown) => String(Number(value ?? 0) || 0);
+
+const offerOf = (p: ServerPresentation): Offer =>
+  p.is_discount && Number(p.discount) > 0
+    ? { discount: String(p.discount), onStore: !!p.discount_store, onPos: !!p.discount_pos }
+    : NO_OFFER;
+
+export const loadProductForEdit = createAsyncThunk<
+  Partial<NewProductState>,
+  { productId: number; mode: "create" | "edit" },
+  ThunkConfig
+>("newProduct/loadForEdit", async ({ productId, mode }, { getState, rejectWithValue }) => {
+  const state = getState();
+  try {
+    const context = getBusinessContext(state);
+    const [product, links, filters, labels, documents] = await Promise.all([
+      getProductRequest(context, productId) as Promise<unknown> as Promise<
+        Record<string, unknown> & { product_models?: ServerModel[] }
+      >,
+      getProductFiltersRequest(context, productId),
+      getFiltersRequest(context),
+      getLabelsRequest(context),
+      getProductDocumentsRequest(context, productId),
+    ]);
+
+    const rawCategory = product.category as number | Category | null;
+    const category =
+      rawCategory && typeof rawCategory === "object"
+        ? rawCategory
+        : (state.products.categories.find((c) => c.id === rawCategory) ?? null);
+
+    const models: DraftModel[] = (product.product_models ?? []).map((m) => ({
+      key: newKey("model"),
+      modelId: m.id,
+      name: m.name,
+      isActive: m.is_active,
+      photos: extractImageUrls(m.images).map((url) => ({
+        key: newKey("photo"),
+        uri: resolveImageUrl(url, context.baseUrl),
+        source: "existing" as const,
+        uploaded: true,
+      })),
+      variants: (m.presentations ?? []).map((p) => ({
+        key: newKey("variant"),
+        presentationId: p.id,
+        name: p.name,
+        cost: String(Number(p.cost) || ""),
+        price: String(Number(p.price) || ""),
+        isActive: p.is_active,
+        barcode: p.barcode ?? "",
+        offer: offerOf(p),
+      })),
+    }));
+
+    // Sin tipo elegido la API manda 0 (o null): los dos significan "falta el tipo".
+    const typeId = Number(product.type) || null;
+    const first = typeId === SIMPLE_TYPE ? models[0]?.variants[0] : undefined;
+
+    return {
+      mode,
+      productId,
+      name: String(product.name ?? ""),
+      category,
+      typeId,
+      models,
+      cost: first?.cost ?? "",
+      price: first?.price ?? "",
+      barcode: first?.barcode ?? "",
+      simpleOffer: first?.offer ?? NO_OFFER,
+      simplePresentationId: first?.presentationId ?? null,
+      showOnStore: product.display_on_store !== false,
+      showOnPos: product.display_on_pos !== false,
+      description: String(product.description ?? ""),
+      sku: String(product.sku ?? ""),
+      ivaRate: toRate(product.iva_rate),
+      iepsRate: toRate(product.ieps_rate),
+      appliedLabels: links.map((link) => ({
+        linkId: link.id,
+        filterId: link.filter,
+        labelId: link.label,
+        filterName: filters.results.find((f) => f.id === link.filter)?.name ?? "",
+        labelName: labels.results.find((l) => l.id === link.label)?.name ?? "",
+      })),
+      filterCatalog: { filters: filters.results, labels: labels.results },
+      documents: documents.map((d) => ({ id: d.id, name: d.name, sizeBytes: d.size_bytes ?? 0 })),
+    };
+  } catch (error) {
+    return rejectWithValue(errorMessage(error));
+  }
+});
+
+// Fase 4 / 05: "Información general".
+export const saveGeneralInfo = createAsyncThunk<
+  { name: string; sku: string; description: string; category: Category | null },
+  { name: string; sku: string; description: string; category: Category | null },
+  ThunkConfig
+>("newProduct/saveGeneral", async (values, { getState, rejectWithValue }) => {
+  const state = getState();
+  const { productId } = state.newProduct;
+  try {
+    if (!productId) throw new Error("No encontramos el producto.");
+    await updateProductRequest(getBusinessContext(state), productId, {
+      name: values.name.trim(),
+      sku: values.sku.trim(),
+      description: values.description.trim(),
+      category: values.category?.id,
+    });
+    return { ...values, name: values.name.trim(), sku: values.sku.trim() };
+  } catch (error) {
+    return rejectWithValue(errorMessage(error));
+  }
+});
+
 // Paso 2: el tipo es definitivo. Con él se crea el primer modelo del producto.
 export const confirmProductType = createAsyncThunk<
   { typeId: number; model: DraftModel },
@@ -549,9 +691,11 @@ export const checkBarcodeInUse = createAsyncThunk<
   if (usedInDraft) return true;
 
   const own = state.newProduct.editingModel?.variants.find((v) => v.key === variantKey);
+  // En el Simple la presentación propia es la del producto: su código no cuenta como repetido.
+  const ownId = variantKey ? own?.presentationId : state.newProduct.simplePresentationId;
   try {
     const found = await findPresentationByBarcode(getBusinessContext(state), code);
-    return found !== null && found.id !== own?.presentationId;
+    return found !== null && found.id !== ownId;
   } catch (error) {
     return rejectWithValue(errorMessage(error));
   }
@@ -840,6 +984,10 @@ const newProductSlice = createSlice({
         }
         if (!state.labelSelection.includes(applied.labelId)) state.labelSelection.push(applied.labelId);
       })
+      .addCase(loadProductForEdit.fulfilled, (_state, action) => ({ ...initialState, ...action.payload }))
+      .addCase(saveGeneralInfo.fulfilled, (state, action) => {
+        Object.assign(state, action.payload);
+      })
       .addCase(saveTaxesAndChannels.fulfilled, (state, action) => {
         Object.assign(state, action.payload);
       })
@@ -946,7 +1094,7 @@ export function toSavedDraft(state: NewProductState): SavedDraft {
 
 // Pantalla a la que vuelve un borrador retomado.
 export function resumeRoute(draft: SavedDraft) {
-  if (draft.typeId === null) return "/new-product/type" as const;
+  if (!draft.typeId) return "/new-product/type" as const;
   if (draft.typeId === SIMPLE_TYPE) {
     return draft.simplePresentationId ? ("/new-product/publish" as const) : ("/new-product/prices" as const);
   }

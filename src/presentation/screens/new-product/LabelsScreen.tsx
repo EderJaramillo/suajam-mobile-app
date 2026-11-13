@@ -11,6 +11,7 @@ import FilterChip from "@/presentation/theme/components/products/FilterChip";
 import ThemedButton from "@/presentation/theme/components/ThemedButton";
 import ThemedText from "@/presentation/theme/components/ThemedText";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { useAfterSave } from "@/presentation/screens/products/sections/useSectionSaved";
 import { router } from "expo-router";
 import { Plus } from "lucide-react-native";
 import { useEffect } from "react";
@@ -19,7 +20,13 @@ import { StyleSheet, View } from "react-native";
 // Fase 3 / 37: cada filtro es una tarjeta con sus etiquetas; se pueden elegir varias.
 const LabelsScreen = () => {
   const dispatch = useAppDispatch();
-  const { filterCatalog, labelSelection, isSaving } = useAppSelector((s) => s.newProduct);
+  const { filterCatalog, labelSelection, appliedLabels, isSaving, mode } = useAppSelector(
+    (s) => s.newProduct,
+  );
+  const isEdit = mode === "edit";
+  const afterSave = useAfterSave();
+  const applied = appliedLabels.map((a) => a.labelId).sort();
+  const isDirty = JSON.stringify([...labelSelection].sort()) !== JSON.stringify(applied);
 
   useEffect(() => {
     dispatch(startEditingLabels());
@@ -35,20 +42,25 @@ const LabelsScreen = () => {
 
   const onSave = async () => {
     const result = await dispatch(saveLabelSelection());
-    if (saveLabelSelection.fulfilled.match(result)) router.back();
+    if (!saveLabelSelection.fulfilled.match(result)) return;
+    if (isEdit) afterSave();
+    else router.back();
   };
 
   return (
     <NewProductLayout
       step={4}
       stepLabel="Publicación"
+      editTitle="Filtros y etiquetas"
       footer={
-        <ThemedButton
-          title="Guardar filtros"
-          loading={isSaving}
-          loadingTitle="Guardando…"
-          onPress={onSave}
-        />
+        !isEdit || isDirty ? (
+          <ThemedButton
+            title={isEdit ? "Guardar esta sección" : "Guardar filtros"}
+            loading={isSaving}
+            loadingTitle="Guardando…"
+            onPress={onSave}
+          />
+        ) : undefined
       }
     >
       <ThemedText variant="title">Filtros y etiquetas</ThemedText>
